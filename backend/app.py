@@ -16,14 +16,16 @@ from functools import wraps
 
 load_dotenv()
 
-app = Flask(__name__, static_folder='public', static_url_path='')
+# Adjust static folder path for structured project
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend')
+app = Flask(__name__, static_folder=static_dir, static_url_path='')
 CORS(app, supports_credentials=True)
 
 app.secret_key = os.getenv('SECRET_KEY', 'carwash_secret_key')
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_SECURE=False, # Change to True if using HTTPS
+    SESSION_COOKIE_SAMESITE='None' if os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True' else 'Lax',
+    SESSION_COOKIE_SECURE=os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True',
     PERMANENT_SESSION_LIFETIME=timedelta(days=7)
 )
 
@@ -98,11 +100,11 @@ def get_logged_in_user(req):
 # =========================
 @app.route("/")
 def home():
-    return send_from_directory('public', 'index.html')
+    return send_from_directory(app.static_folder, 'index.html')
 
 @app.route('/<path:path>')
 def serve_static(path):
-    return send_from_directory('public', path)
+    return send_from_directory(app.static_folder, path)
 
 # =========================
 # AUTH ROUTES
@@ -244,6 +246,7 @@ def login():
 @app.route("/book", methods=["POST"])
 def book_service():
     data = request.json
+    print(f"DEBUG: Booking request data: {data}")
     try:
         user_id = session.get('user_id')
         if not user_id:

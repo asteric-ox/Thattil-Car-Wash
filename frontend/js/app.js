@@ -89,9 +89,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const phoneInput = document.querySelector('input[name="phone"]');
                 const emailInput = document.querySelector('input[name="email"]');
 
-                if (nameInput) nameInput.value = data.user.name;
-                if (phoneInput) phoneInput.value = data.user.phone;
-                if (emailInput && data.user.email) emailInput.value = data.user.email;
+                if (nameInput) nameInput.value = data.user.name || '';
+                if (phoneInput) phoneInput.value = data.user.phone || '';
+                if (emailInput && data.user.email) emailInput.value = data.user.email || '';
             } else {
                 updateUserUI(null);
             }
@@ -117,33 +117,34 @@ document.addEventListener('DOMContentLoaded', () => {
                     badge.classList.add('hidden');
                 }
 
-                // Click to read
+                // Click to read (now more reliable)
                 btn.onclick = async () => {
                     if (data.length === 0) {
-                        alert('No notifications.');
+                        showNotification('Notifications', 'No notifications.', 'info');
                         return;
                     }
 
-                    // Format message nicely
-                    const msg = data.map(n => {
-                        const status = n.is_read ? '✓' : '•';
-                        return `${status} ${n.message} (${new Date(n.created_at).toLocaleDateString()})`;
-                    }).join('\n');
-
-                    alert('Notifications:\n' + msg);
+                    // Toggle a notification list (we'll show the latest ones via toast for now as it's cleaner)
+                    const latest = data[0];
+                    showNotification('Latest Update', latest.message, latest.is_read ? 'info' : 'success');
 
                     // Mark as read if there were unread ones
                     if (unreadCount > 0) {
                         try {
                             await fetch('/api/notifications/mark-read', { method: 'POST' });
-                            // Update UI immediately
                             badge.classList.add('hidden');
-                            // Re-fetch to sync simple state if needed, or just rely on hide
                         } catch (e) {
                             console.error('Failed to mark read', e);
                         }
                     }
                 };
+
+                // Automatic toast for new unread notifications
+                const newest = data[0];
+                if (newest && !newest.is_read && window.lastNotifiedId !== newest._id) {
+                    window.lastNotifiedId = newest._id;
+                    showNotification('New Management Alert', newest.message, 'success');
+                }
             }
         } catch (err) {
             console.error(err);
@@ -475,10 +476,8 @@ form.addEventListener('submit', async (e) => {
                 startPickupConfirmationTimer(result.bookingId);
             }
 
-            // Print Bill
-            if (confirm("Do you want to print the receipt?")) {
-                printBill(data, result.bookingId);
-            }
+            // fetchNotifications call is already below at line 492
+            console.log("Booking successful, notification will appear in bar.");
 
             // window.location.reload(); // Don't reload, just reset and update UI
             form.reset();
@@ -498,7 +497,7 @@ form.addEventListener('submit', async (e) => {
                 window.returnToSlots = false;
             }
         } else {
-            alert('Something went wrong: ' + result.message);
+            showNotification('Booking Error', result.message || 'Something went wrong. Please check all fields.', 'error');
         }
     } catch (error) {
         console.error('Error:', error);
@@ -1337,53 +1336,8 @@ async function fetchNotifications() {
 }
 
 
-function printBill(bookingData, bookingId) {
-    const printWindow = window.open('', '', 'height=600,width=800');
+// printBill removed as requested
 
-    // Calculate Total (Simple logic based on packet name - assuming prices for now or passing it)
-    let priceEstimate = "Pending Inspection";
-
-    if (bookingData.package.includes('Premium')) priceEstimate = "₹1200 + Addons";
-    if (bookingData.package.includes('Deluxe')) priceEstimate = "₹800 + Addons";
-    if (bookingData.package.includes('Express')) priceEstimate = "₹450 + Addons";
-
-    printWindow.document.write('<html><head><title>Booking Receipt</title>');
-    printWindow.document.write('<style>');
-    printWindow.document.write('body { font-family: sans-serif; padding: 40px; color: #333; }');
-    printWindow.document.write('.header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }');
-    printWindow.document.write('.logo { font-size: 24px; font-weight: bold; color: #06b6d4; }');
-    printWindow.document.write('.details { margin-bottom: 20px; line-height: 1.6; }');
-    printWindow.document.write('.footer { margin-top: 40px; text-align: center; font-size: 12px; color: #777; border-top: 1px solid #eee; padding-top: 20px; }');
-    printWindow.document.write('.btn { display: inline-block; background: #06b6d4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 10px; }');
-    printWindow.document.write('</style>');
-    printWindow.document.write('</head><body>');
-
-    printWindow.document.write('<div class="header">');
-    printWindow.document.write('<div class="logo">D2 CAR WASH</div>');
-    printWindow.document.write(`<div>Booking Receipt #${bookingId}</div>`);
-    printWindow.document.write('</div>');
-
-    printWindow.document.write('<div class="details">');
-    printWindow.document.write(`<strong>Customer:</strong> ${bookingData.name}<br>`);
-    printWindow.document.write(`<strong>Vehicle:</strong> ${bookingData.vehicleNumber || 'N/A'} (${bookingData.vehicleType})<br>`);
-    printWindow.document.write(`<strong>Service:</strong> ${bookingData.package}<br>`);
-    printWindow.document.write(`<strong>Date:</strong> ${bookingData.date} at ${bookingData.time}<br>`);
-    printWindow.document.write(`<strong>Add-ons:</strong> ${bookingData.addons.length ? bookingData.addons.join(', ') : 'None'}<br>`);
-
-    printWindow.document.write('<hr style="border: 0; border-top: 1px dashed #ccc; margin: 15px 0;">');
-    printWindow.document.write(`<strong>Est. Cost:</strong> ${priceEstimate}<br>`);
-    printWindow.document.write('</div>');
-
-    printWindow.document.write('<div class="footer">');
-    printWindow.document.write('<p>Thank you for choosing D2 Car Wash!</p>');
-    printWindow.document.write('<p>Please rate us on Google Maps:</p>');
-    printWindow.document.write('<a href="https://maps.app.goo.gl/AbLovHuWNUxwr5ez7" target="_blank" class="btn">Leave a Review</a>');
-    printWindow.document.write('</div>');
-
-    printWindow.document.write('</body></html>');
-    printWindow.document.close();
-    printWindow.print();
-}
 
 // Initialize Scroll Observer for main content
 window.addEventListener('load', () => {
